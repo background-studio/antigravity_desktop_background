@@ -167,7 +167,11 @@ mod tests {
         assert!(payload
             .script
             .contains(".text-background {\\n  color: var(--agbg-solid-background) !important;"));
+        assert!(payload
+            .script
+            .contains("--background: transparent !important;"));
         assert!(payload.script.contains("[data-main-content-body"));
+        assert!(payload.script.contains("[data-browser-hole]"));
         assert!(payload.script.contains(".absolute.pointer-events-none"));
         assert!(payload.script.contains("pre:has(.code-block)"));
         assert!(payload.script.contains("div:has(.code-block)"));

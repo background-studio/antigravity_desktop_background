@@ -112,6 +112,7 @@ html.antigravity-background-task.antigravity-background-task-disabled { --agbg-r
 
 /* 在 #root 作用域内将页面/外壳底色令牌透出，卡片与表面令牌按不透明度混合；绝不污染 :root。 */
 html.antigravity-background-active #root {
+  --background: transparent !important;
   --shell: transparent !important;
   --shell-canvas: transparent !important;
   --content: transparent !important;
@@ -159,10 +160,15 @@ html.antigravity-background-active [role="navigation"] [data-project-card="true"
   background-color: transparent !important;
 }
 
-/* 主画布与右侧辅助面板：单层着色，保留原生圆角与 ::after 1px 描边。 */
-html.antigravity-background-active [data-main-content-body="true"],
-html.antigravity-background-active [data-side-panel-body="true"] {
+/* 主画布与右侧辅助面板：单层着色，保留原生圆角与 ::after 1px 描边；内置浏览器挖洞宿主必须保持透明。 */
+html.antigravity-background-active [data-main-content-body="true"]:not([data-has-browser-hole="true"]),
+html.antigravity-background-active [data-side-panel-body="true"]:not([data-has-browser-hole="true"]) {
   background-color: color-mix(in srgb, var(--agbg-solid-content) calc(var(--agbg-surface-opacity) * 100%), transparent) !important;
+}
+html.antigravity-background-active body[data-has-browser-hole="true"] :is([data-main-content-body="true"], [data-side-panel-body="true"])[data-has-browser-hole="true"],
+html.antigravity-background-active body[data-has-browser-hole="true"] [data-browser-hole]:not([data-browser-hole="false"]) {
+  background-color: transparent !important;
+  background-image: none !important;
 }
 
 /* 会话滚动区底部/顶部用 var(--background) 刷的渐隐条，在半透明背景上会变成突兀的黑带。 */
@@ -318,8 +324,11 @@ export function buildRendererPayload(input: PayloadInput) {
     const cleanup = () => {
       const state = window[STATE];
       state?.observer?.disconnect();
+      state?.holeResizeObserver?.disconnect();
       if (state?.timer) clearInterval(state.timer);
       if (state?.onResize) window.removeEventListener("resize", state.onResize);
+      if (state?.onPointerMove) window.removeEventListener("pointermove", state.onPointerMove);
+      if (state?.onTransitionEnd) window.removeEventListener("transitionend", state.onTransitionEnd);
       if (state?.onScheme) state.scheme?.removeEventListener?.("change", state.onScheme);
       if (scheduled) cancelAnimationFrame(scheduled);
       scheduled = 0;
@@ -369,40 +378,66 @@ export function buildRendererPayload(input: PayloadInput) {
       return colors;
     };
 
-    // 内置浏览器 WebContentsView 挖洞激活时，用 clip-path 把浏览器洞区域从背景层抠除。
+    let observedHoleNodes = [];
+    let holeResizeObserver = null;
+
+    // 内置浏览器 WebContentsView 挖洞激活时，用 clip-path 仅把浏览器视口区域从背景层抠除。
     const updateBrowserHoleClip = (layer) => {
       if (!layer) return;
       if (document.body?.getAttribute("data-has-browser-hole") !== "true") {
         if (layer.style.clipPath) layer.style.clipPath = "";
+        if (holeResizeObserver && observedHoleNodes.length > 0) {
+          holeResizeObserver.disconnect();
+          observedHoleNodes = [];
+        }
         return;
       }
-      const candidates = [...document.querySelectorAll('[data-has-browser-hole="true"]')].filter(
-        (el) => el !== document.body && !el.classList.contains("agy-inset-shell") && !el.classList.contains("agy-shell")
-      );
-      let holeRect = null;
-      for (const el of candidates) {
-        if (el.querySelector('[data-has-browser-hole="true"]')) continue;
+      // 优先精确匹配 Antigravity 标记的 [data-browser-hole] 视口节点，退回最内层 [data-has-browser-hole="true"]。
+      let holeNodes = [...document.querySelectorAll('[data-browser-hole]:not([data-browser-hole="false"])')].filter((el) => {
         const rect = el.getBoundingClientRect();
-        if (rect.width >= 40 && rect.height >= 40) {
-          holeRect = rect;
-          break;
+        return rect.width >= 40 && rect.height >= 40;
+      });
+      if (holeNodes.length === 0) {
+        const candidates = [...document.querySelectorAll('[data-has-browser-hole="true"]')].filter(
+          (el) => el !== document.body && !el.classList.contains("agy-inset-shell") && !el.classList.contains("agy-shell")
+        );
+        holeNodes = candidates.filter((el) => {
+          if (el.querySelector('[data-has-browser-hole="true"]')) return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width >= 40 && rect.height >= 40;
+        });
+      }
+      if (holeResizeObserver) {
+        const changed =
+          holeNodes.length !== observedHoleNodes.length ||
+          holeNodes.some((node, idx) => observedHoleNodes[idx] !== node);
+        if (changed) {
+          holeResizeObserver.disconnect();
+          for (const node of holeNodes) holeResizeObserver.observe(node);
+          observedHoleNodes = holeNodes;
         }
       }
-      if (!holeRect) {
+      if (holeNodes.length === 0) {
         if (layer.style.clipPath) layer.style.clipPath = "";
         return;
       }
-      const x1 = Math.max(0, Math.floor(holeRect.left));
-      const y1 = Math.max(0, Math.floor(holeRect.top));
-      const x2 = Math.min(window.innerWidth, Math.ceil(holeRect.right));
-      const y2 = Math.min(window.innerHeight, Math.ceil(holeRect.bottom));
-      const nextClip =
-        "polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, " +
-        x1 + "px " + y1 + "px, " +
-        x2 + "px " + y1 + "px, " +
-        x2 + "px " + y2 + "px, " +
-        x1 + "px " + y2 + "px, " +
-        x1 + "px " + y1 + "px)";
+      const segments = ["0 0, 100% 0, 100% 100%, 0 100%, 0 0"];
+      for (const node of holeNodes) {
+        const rect = node.getBoundingClientRect();
+        const x1 = Math.max(0, Math.floor(rect.left));
+        const y1 = Math.max(0, Math.floor(rect.top));
+        const x2 = Math.min(window.innerWidth, Math.ceil(rect.right));
+        const y2 = Math.min(window.innerHeight, Math.ceil(rect.bottom));
+        if (x2 - x1 < 40 || y2 - y1 < 40) continue;
+        segments.push(
+          x1 + "px " + y1 + "px, " +
+          x2 + "px " + y1 + "px, " +
+          x2 + "px " + y2 + "px, " +
+          x1 + "px " + y2 + "px, " +
+          x1 + "px " + y1 + "px"
+        );
+      }
+      const nextClip = segments.length > 1 ? "polygon(evenodd, " + segments.join(", ") + ")" : "";
       if (layer.style.clipPath !== nextClip) layer.style.clipPath = nextClip;
     };
 
@@ -515,6 +550,21 @@ export function buildRendererPayload(input: PayloadInput) {
     }
     const onResize = () => scheduleInstall();
     window.addEventListener("resize", onResize);
+    const onPointerMove = (event) => {
+      if (event.buttons && document.body?.getAttribute("data-has-browser-hole") === "true") {
+        scheduleInstall();
+      }
+    };
+    const onTransitionEnd = () => {
+      if (document.body?.getAttribute("data-has-browser-hole") === "true") {
+        scheduleInstall();
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("transitionend", onTransitionEnd, { passive: true });
+    if (typeof ResizeObserver === "function") {
+      holeResizeObserver = new ResizeObserver(scheduleInstall);
+    }
     let scheme = null;
     try { scheme = window.matchMedia("(prefers-color-scheme: dark)"); } catch {}
     const onScheme = () => scheduleInstall();
@@ -524,8 +574,11 @@ export function buildRendererPayload(input: PayloadInput) {
       revision: config.revision,
       cleanup,
       observer,
+      holeResizeObserver,
       timer,
       onResize,
+      onPointerMove,
+      onTransitionEnd,
       scheme,
       onScheme,
       mediaUrl,

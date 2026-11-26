@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- 修复打开内置浏览器侧栏（`body[data-has-browser-hole="true"]`）时中间会话主区域变纯黑的问题：在 `#root` 作用域内将 `--background` 设为透明（继续保持 `:root` 原色不被修改，不污染 `app_storage.json`），消除 `.browser-hole-opaque`、`[data-pane-id]`、`[data-split-sash]` 与分屏容器回退到实色 `--background` 的遮挡。
+- 修复右侧辅助面板作为内置浏览器挖洞宿主时被误叠一层半透明底色的问题，并升级 `updateBrowserHoleClip` 优先精确抠除 `[data-browser-hole]` 视口区域、配合 `ResizeObserver` 随分栏拖拽实时更新。
+
 ## 0.1.1
 
 - 修复会话窗口 Markdown 代码块（含顶部语言栏与复制按钮）外层出现直角黑框与高不透明底色的问题：外层 `<pre>` 改为透明，仅内层圆角代码卡片跟随「卡片不透明度」单层着色。
