@@ -1,0 +1,11 @@
+{
+  "pluginId": "antigravity",
+  "mark": "mark-generated.png",
+  "removeWhiteBackground": true,
+  "frame": {
+    "shadow": "#1D365E",
+    "stroke": "#5BA8FF",
+    "highlight": "#CFE7FF"
+  },
+  "background": "background-source.png"
+}
