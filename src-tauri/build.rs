@@ -15,7 +15,9 @@ fn extract_raw(source: &str, marker: &str) -> String {
 fn main() {
     let payload_path = PathBuf::from("../src/main/payload.ts");
     println!("cargo:rerun-if-changed={}", payload_path.display());
-    let source = fs::read_to_string(&payload_path).expect("read shared TypeScript payload");
+    let source = fs::read_to_string(&payload_path)
+        .expect("read shared TypeScript payload")
+        .replace("\r\n", "\n");
     let background_css = extract_raw(&source, "const BACKGROUND_CSS = String.raw`");
     let review_shadow_css = extract_raw(&source, "const REVIEW_SHADOW_CSS = String.raw`");
     let runtime_template = extract_raw(&source, "  return String.raw`");

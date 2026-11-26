@@ -188,7 +188,7 @@ html.antigravity-background-active .surface-composer > .surface-composer-card {
   background-color: color-mix(in srgb, var(--agbg-solid-onyx-raised) calc(var(--agbg-composer-opacity) * 100%), transparent) !important;
 }
 
-/* 代码块、Monaco 编辑器与终端：使用 terminalOpacity 保证代码与命令输出清晰易读。 */
+/* Monaco 编辑器与终端：使用 terminalOpacity 保证代码与命令输出清晰易读。 */
 html.antigravity-background-active #root :is(
   .monaco-editor,
   .monaco-editor-background,
@@ -198,8 +198,19 @@ html.antigravity-background-active #root :is(
 ) {
   background-color: color-mix(in srgb, var(--agbg-solid-content) calc(var(--agbg-terminal-opacity) * 100%), transparent) !important;
 }
-html.antigravity-background-active #root pre {
-  background-color: color-mix(in srgb, var(--agbg-solid-card) calc(var(--agbg-terminal-opacity) * 100%), transparent) !important;
+
+/*
+ * Markdown 代码块：Antigravity 的 <pre class="notranslate"> 只是外层语义容器（无圆角且包裹 my-2 边距），
+ * 真正带圆角与复制栏的卡片是里面的 div.rounded-xl（含 .code-block）。
+ * 因此外层 <pre> 必须保持透明，仅对内层圆角卡片按 cardOpacity 单层着色，避免出现直角黑框与双层不透明底。
+ */
+html.antigravity-background-active #root pre:has(.code-block),
+html.antigravity-background-active #root pre:has(> .rounded-xl) {
+  background-color: transparent !important;
+}
+html.antigravity-background-active #root pre > :is(.rounded-xl, div:has(.code-block)),
+html.antigravity-background-active #root pre:not(:has(.code-block)):not(:has(> .rounded-xl)) {
+  background-color: color-mix(in srgb, var(--agbg-solid-card) calc(var(--agbg-card-opacity) * 100%), transparent) !important;
 }
 
 /*
